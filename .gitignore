@@ -5,6 +5,8 @@ model/
 vis/imgs/
 vis/vis.json
 testimages/
+checkpoint/
 checkpoints/
 test/
+output*
 .idea/
