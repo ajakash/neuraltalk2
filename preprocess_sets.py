@@ -16,7 +16,7 @@ import csv
 
 data_paths = list(os.walk('/local-scratch2/ajakash/aabdujyo/2017_set_compression/Data/Sets_12500'))
 
-with open('Category Image Description - Sheet1.csv', 'rb') as csvfile:
+with open('sets/Category Image Description - Sheet1.csv', 'rb') as csvfile:
     reader = csv.reader(csvfile, delimiter=',')
 #    reader_utf_8 = utf_8_encoder(reader)
 
@@ -49,6 +49,6 @@ with open('Category Image Description - Sheet1.csv', 'rb') as csvfile:
             #print set_info
             out.append(set_info)
 
-    json.dump(out, open('sets_raw.json', 'w'))
+    json.dump(out, open('sets/sets_raw.json', 'w'))
 
     #print out

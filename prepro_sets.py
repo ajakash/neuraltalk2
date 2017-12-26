@@ -28,6 +28,11 @@ The json file has a dict that contains:
 - an 'ix_to_word' field storing the vocab in form {ix:'word'}, where ix is 1-indexed
 - an 'images' field that is a list holding auxiliary information for each image set,
   such as in particular the 'split' it was assigned to.
+
+TO DO:
+1) Handle folders with image read error
+2) Crop panorama to pieces
+3) Handle image sets with varying sizes
 """
 
 # /local-scratch2/ajakash/aabdujyo/2017_set_compression/Data/Sets_12500
@@ -41,7 +46,7 @@ import string
 # non-standard dependencies:
 import h5py
 import numpy as np
-from scipy.misc import imread, imresize
+from scipy.misc import imread, imresize, toimage
 
 def prepro_captions(imgs):
   
@@ -120,15 +125,15 @@ def assign_splits(imgs, params):
 
 def encode_captions(imgs, params, wtoi):
   """ 
-  encode all captions into one large array, which will be 1-indexed.
+  encode all caption sentences into one large array, which will be 1-indexed.
   also produces label_start_ix and label_end_ix which store 1-indexed 
-  and inclusive (Lua-style) pointers to the first and last caption for
-  each image in the dataset.
+  and inclusive (Lua-style) pointers to the first and last sentence for
+  each image set description in the dataset.
   """
 
   max_length = params['max_length']
-  N = len(imgs)
-  M = sum(len(img['final_captions']) for img in imgs) # total number of captions
+  N = len(imgs) # Number of image sets
+  M = sum(len(img['final_captions']) for img in imgs) # total number of sentences from all descriptions
 
   label_arrays = []
   label_start_ix = np.zeros(N, dtype='uint32') # note: these will be one-indexed
@@ -162,6 +167,21 @@ def encode_captions(imgs, params, wtoi):
   print 'encoded captions to array of size ', `L.shape`
   return L, label_start_ix, label_end_ix, label_length
 
+def set_info(imgs):
+  # create arrays of uint32 that points to start and end of each set
+  N = len(imgs)
+  set_start_ix = np.zeros(N, dtype='uint32')
+  set_end_ix = np.zeros(N, dtype='uint32')
+
+  counter = 1
+  for i,img in enumerate(imgs):
+    n = len(img['file_names'])
+    set_start_ix[i] = counter
+    set_end_ix[i] = counter + n - 1
+
+    counter += n
+  return set_start_ix, set_end_ix
+
 def main(params):
 
   imgs = json.load(open(params['input_json'], 'r'))
@@ -178,7 +198,6 @@ def main(params):
 
   # assign the splits
   assign_splits(imgs, params)
-  sys.exit("This is it.")
 
   # encode captions in large arrays, ready to ship to hdf5 file
   L, label_start_ix, label_end_ix, label_length = encode_captions(imgs, params, wtoi)
@@ -190,25 +209,47 @@ def main(params):
   f.create_dataset("label_start_ix", dtype='uint32', data=label_start_ix)
   f.create_dataset("label_end_ix", dtype='uint32', data=label_end_ix)
   f.create_dataset("label_length", dtype='uint32', data=label_length)
-  dset = f.create_dataset("images", (N,3,256,256), dtype='uint8') # space for resized images
+
+  # create set_start_ix and set_end_ix
+  set_start_ix, set_end_ix = set_info(imgs)
+  f.create_dataset("set_start_ix", dtype='uint32', data=set_start_ix)
+  f.create_dataset("set_end_ix", dtype='uint32', data=set_end_ix)
+
+  K = sum([len(img['file_names']) for img in imgs])
+  print N, K
+  dset = f.create_dataset("images", (K,3,256,256), dtype='uint8') # space for resized images
   for i,img in enumerate(imgs):
-    # load the image
-    I = imread(os.path.join(params['images_root'], img['file_path']))
-    try:
-        Ir = imresize(I, (256,256))
-    except:
-        print 'failed resizing image %s - see http://git.io/vBIE0' % (img['file_path'],)
+    '''
+    skip = 0
+    for fname in img['file_names']:
+      try:
+        I = imread(os.path.join(img['file_loc'], fname))
+      except:
+        skip = 1
+        print "skipping " + os.path.join(img['file_loc'], fname)
+    '''
+    for fname in img['file_names']:
+      #if skip == 1:
+      #  break
+
+      # load the image
+      #print os.path.join(img['file_loc'], fname)
+      I = imread(os.path.join(img['file_loc'], fname))
+      try:
+        Ir = imresize(I[:,:,0:3], (256,256))
+      except:
+        print 'failed resizing image %s - see http://git.io/vBIE0' % (img['file_loc']+fname,)
         raise
-    # handle grayscale input images
-    if len(Ir.shape) == 2:
-      Ir = Ir[:,:,np.newaxis]
-      Ir = np.concatenate((Ir,Ir,Ir), axis=2)
-    # and swap order of axes from (256,256,3) to (3,256,256)
-    Ir = Ir.transpose(2,0,1)
-    # write to h5
-    dset[i] = Ir
-    if i % 1000 == 0:
-      print 'processing %d/%d (%.2f%% done)' % (i, N, i*100.0/N)
+      # handle grayscale input images
+      if len(Ir.shape) == 2:
+        Ir = Ir[:,:,np.newaxis]
+        Ir = np.concatenate((Ir,Ir,Ir), axis=2)
+      # and swap order of axes from (256,256,3) to (3,256,256)
+      Ir = Ir.transpose(2,0,1)
+      # write to h5
+      dset[i] = Ir
+      if i % 1000 == 0:
+        print 'processing %d/%d (%.2f%% done)' % (i, N, i*100.0/N)
   f.close()
   print 'wrote ', params['output_h5']
 
@@ -220,7 +261,8 @@ def main(params):
     
     jimg = {}
     jimg['split'] = img['split']
-    if 'file_path' in img: jimg['file_path'] = img['file_path'] # copy it over, might need
+    if 'file_loc' in img: jimg['file_loc'] = img['file_loc'] # copy it over, might need
+    if 'file_names' in img: jimg['file_names'] = img['file_names'] # copy it over, might need
     if 'id' in img: jimg['id'] = img['id'] # copy over & mantain an id, if present (e.g. coco ids, useful)
     
     out['images'].append(jimg)
@@ -240,7 +282,7 @@ if __name__ == "__main__":
   
   # options
   parser.add_argument('--max_length', default=16, type=int, help='max length of a caption, in number of words. captions longer than this get clipped.')
-  parser.add_argument('--images_root', default='', help='root location in which images are stored, to be prepended to file_path in input json')
+  #parser.add_argument('--images_root', default='', help='root location in which images are stored, to be prepended to file_path in input json')
   parser.add_argument('--word_count_threshold', default=5, type=int, help='only words that occur more than this number of times will be put in vocab')
   parser.add_argument('--num_test', default=0, type=int, help='number of test images (to withold until very very end)')
 
