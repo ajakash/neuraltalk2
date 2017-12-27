@@ -33,7 +33,11 @@ function DataLoader:__init(opt)
   -- load the pointers in full to RAM (should be small enough)
   self.label_start_ix = self.h5_file:read('/label_start_ix'):all()
   self.label_end_ix = self.h5_file:read('/label_end_ix'):all()
-  
+
+  -- load the pointers for image sets in full to RAM
+  self.set_start_ix = self.h5_file:read('/set_start_ix'):all()
+  self.set_end_ix = self.h5_file:read('/set_end_ix'):all()
+
   -- separate out indexes for each of the provided splits
   self.split_ix = {}
   self.iterators = {}
