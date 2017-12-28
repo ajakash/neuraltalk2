@@ -75,9 +75,11 @@ end
   Split is a string identifier (e.g. train|val|test)
   Returns a batch of data:
   - X (N,3,H,W) containing the images
-  - y (L,M) containing the captions as columns (which is better for contiguous memory during training)
+  - y (L,M) containing the captions as columns (which is better 
+  for contiguous memory during training)
   - info table of length N, containing additional information
-  The data is iterated linearly in order. Iterators for any split can be reset manually with resetIterator()
+  The data is iterated linearly in order. Iterators for any split 
+  can be reset manually with resetIterator()
 --]]
 function DataLoader:getBatch(opt)
   local split = utils.getopt(opt, 'split') -- lets require that user passes this in, for safety

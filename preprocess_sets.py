@@ -7,7 +7,7 @@ json file will have the form (a list of dictionaries)
     captions: ['sentence_1', 'sentence_2', ...],
     id: <create an id here for now?> },  ...]
 
-TO UPDATE: Modify so that it processes folders with <10 images as well
+TO DO: Modify so that it processes folders with <10 images as well
 """
 
 import os
